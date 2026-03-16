@@ -1,0 +1,43 @@
+Traceback (most recent call last):
+  File "D:\Smart cctv\smart_campus_safety\debug_to_file.py", line 12, in run_debug
+    prob = f_detector.predict_fight()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Smart cctv\smart_campus_safety\app\detectors\fight_detector.py", line 90, in predict_fight
+    logits = self.model(x)
+             ^^^^^^^^^^^^^
+  File "C:\Users\Hp\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\nn\modules\module.py", line 1776, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Hp\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\nn\modules\module.py", line 1787, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: The following operation failed in the TorchScript interpreter.
+Traceback of TorchScript, serialized code (most recent call last):
+  File "code/__torch__/torch/nn/modules/container/___torch_mangle_18.py", line 24, in forward
+    _6 = getattr(self, "6")
+    _7 = getattr(self, "7")
+    input0 = (_0).forward(input, )
+              ~~~~~~~~~~~ <--- HERE
+    input1 = (_1).forward(input0, )
+    input2 = (_2).forward__0(input1, None, )
+  File "code/__torch__/___torch_mangle_16.py", line 13, in forward
+    baseModel = self.baseModel
+    x1 = (baseModel).forward(x0, )
+    return torch.view(x1, [b, t, -1])
+           ~~~~~~~~~~ <--- HERE
+
+Traceback of TorchScript, original code (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/container.py", line 253, in forward
+        """
+        for module in self:
+            input = module(input)
+                    ~~~~~~ <--- HERE
+        return input
+  File "/tmp/ipykernel_1807/2480368320.py", line 15, in forward
+        x = x.view(b*t,c,h,w)
+        x = self.baseModel(x)
+        x = x.view(b,t,-1)
+            ~~~~~~ <--- HERE
+        return x
+RuntimeError: view size is not compatible with input tensor's size and stride (at least one dimension spans across two contiguous subspaces). Use .reshape(...) instead.
+

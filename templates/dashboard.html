@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ location_name }}{% endblock %}
+
+{% block head_extra %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">Analytics Dashboard</h3>
+      <div class="text-muted small">Summary and trends for campus incidents (corridor / hostel gate)</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('index') }}">
+        <i class="bi bi-camera-video me-1"></i>Live
+      </a>
+      <a class="btn btn-primary" href="{{ url_for('incidents') }}">
+        <i class="bi bi-journal-text me-1"></i>Incidents
+      </a>
+      <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#stopModal">
+        <i class="bi bi-stop-circle me-1"></i>Stop
+      </button>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Total Incidents</div>
+              <div class="kpi-value">{{ total_incidents }}</div>
+            </div>
+            <div class="fs-3 text-primary"><i class="bi bi-collection"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Critical Incidents</div>
+              <div class="kpi-value">{{ critical_count }}</div>
+              <div class="text-muted small">{{ "%.1f"|format(critical_pct) }}% of total</div>
+            </div>
+            <div class="fs-3 text-danger"><i class="bi bi-exclamation-triangle"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Last Incident</div>
+              <div class="kpi-value" style="font-size: 1.05rem;">
+                {{ last_incident_time if last_incident_time else "—" }}
+              </div>
+            </div>
+            <div class="fs-3 text-secondary"><i class="bi bi-clock-history"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card">
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <div class="text-muted small">Active Days</div>
+              <div class="kpi-value">{{ day_labels|length }}</div>
+            </div>
+            <div class="fs-3 text-success"><i class="bi bi-calendar-check"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-4">
+      <div class="card panel-card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Incidents by Risk</h5>
+          <div class="text-muted small mb-3">How many alerts were logged at each risk level</div>
+          <canvas id="riskChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-8">
+      <div class="card panel-card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Incident Trend (Daily)</h5>
+          <div class="text-muted small mb-3">Incident count per day for this campus camera</div>
+          <canvas id="dayChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-6">
+      <div class="card panel-card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Top Event Types</h5>
+          <div class="text-muted small mb-3">Most frequent categories (fight-only vs weapon/fight)</div>
+          <canvas id="eventChart"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card panel-card h-100">
+        <div class="card-body">
+          <h5 class="card-title mb-2">Recent Incidents</h5>
+          <div class="text-muted small mb-3">Last 10 incidents (latest first)</div>
+          {% if recent_incidents %}
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Time</th>
+                    <th>Risk</th>
+                    <th>Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for inc in recent_incidents %}
+                    <tr>
+                      <td class="text-nowrap">{{ inc.timestamp }}</td>
+                      <td class="text-nowrap">
+                        {% set r = inc.risk_level %}
+                        {% if r == 'CRITICAL' %}
+                          <span class="badge text-bg-danger campus-badge">CRITICAL</span>
+                        {% elif r == 'HIGH_RISK' %}
+                          <span class="badge text-bg-warning campus-badge">HIGH</span>
+                        {% elif r == 'MEDIUM_RISK' %}
+                          <span class="badge text-bg-info campus-badge">MEDIUM</span>
+                        {% else %}
+                          <span class="badge text-bg-success campus-badge">{{ r }}</span>
+                        {% endif %}
+                      </td>
+                      <td class="text-nowrap">{{ inc.event_type }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-3">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('incidents') }}">
+                View full incident log
+              </a>
+            </div>
+          {% else %}
+            <div class="alert alert-secondary mb-0">
+              No incidents recorded yet. Keep the campus camera monitoring active.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop modal -->
+  <div class="modal fade" id="stopModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Stop monitoring?</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          This will release the campus camera and stop the Flask server. You can restart it later with
+          <code>python web_app.py</code>.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <form method="post" action="{{ url_for('shutdown') }}">
+            <button type="submit" class="btn btn-danger">
+              <i class="bi bi-stop-circle me-1"></i>Stop now
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const riskLabels = {{ risk_labels | tojson }};
+    const riskValues = {{ risk_values | tojson }};
+    const dayLabels = {{ day_labels | tojson }};
+    const dayValues = {{ day_values | tojson }};
+    const eventLabels = {{ event_labels | tojson }};
+    const eventValues = {{ event_values | tojson }};
+
+    function riskColor(label) {
+      if (label === "CRITICAL") return "#dc3545";
+      if (label === "HIGH_RISK") return "#fd7e14";
+      if (label === "MEDIUM_RISK") return "#0dcaf0";
+      if (label === "NO_RISK") return "#198754";
+      return "#6c757d";
+    }
+
+    // Doughnut chart for risk distribution
+    new Chart(document.getElementById('riskChart').getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: riskLabels,
+        datasets: [{
+          data: riskValues,
+          backgroundColor: riskLabels.map(riskColor),
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom' }
+        },
+        cutout: '65%'
+      }
+    });
+
+    // Line chart for daily trend
+    new Chart(document.getElementById('dayChart').getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: dayLabels,
+        datasets: [{
+          label: 'Incidents per day',
+          data: dayValues,
+          borderColor: '#1a237e',
+          backgroundColor: 'rgba(26,35,126,0.15)',
+          tension: 0.25,
+          fill: true,
+          pointRadius: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+
+    // Bar chart for event types
+    new Chart(document.getElementById('eventChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: eventLabels,
+        datasets: [{
+          label: 'Count',
+          data: eventValues,
+          backgroundColor: 'rgba(26,35,126,0.85)'
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
+        }
+      }
+    });
+  </script>
+{% endblock %}
+

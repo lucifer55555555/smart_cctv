@@ -1,0 +1,8 @@
+
+# Large model files
+models/*.pt
+models/*.pth
+*.pt
+__pycache__/
+*.pyc
+
