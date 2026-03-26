@@ -63,7 +63,8 @@ class RiskEngine:
             reasons.append("Weapon and fight detected in campus camera")
         elif has_weapon:
             level = RiskLevel.HIGH_RISK
-            reasons.append("Weapon detected in campus camera")
+            labels = ", ".join(set(d["label"] for d in weapon_detections))
+            reasons.append(f"Weapon detected ({labels}) in campus camera")
         elif has_long_fight:
             level = RiskLevel.CRITICAL
             reasons.append("Prolonged fight detected in campus camera")

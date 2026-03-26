@@ -11,11 +11,13 @@ CONFIG = {
         "location_name": "AIML corridor 1st floor",
         "frame_width": 640,
         "frame_height": 480,
+
+
         "fps": 20,
     },
     "detection": {
-        "weapon_conf_threshold": 0.5,
-        "fight_prob_threshold": 0.7,
+        "weapon_conf_threshold": 0.75,
+        "fight_prob_threshold": 0.5,
         "min_fight_duration_sec": 2.0,
         # Match exported TorchScript violence model: 30-frame sequences
         "sequence_length": 30,

@@ -30,14 +30,23 @@ def pipeline_thread():
     global latest_frame
     print("[pipeline_thread] Starting background processing...")
     
-    # Run the generator indefinitely
-    for ok, frame, risk in pipeline.frames():
-        if not ok or frame is None:
-            time.sleep(0.1)
-            continue
-            
-        with latest_frame_lock:
-            latest_frame = frame.copy()
+    while True:
+        # Run the generator. It will yield (False, None, None) if stopped.
+        try:
+            for ok, frame, risk in pipeline.frames():
+                if not ok or frame is None:
+                    # Not running or camera error; just wait and retry.
+                    time.sleep(0.5)
+                    with latest_frame_lock:
+                        latest_frame = None
+                    continue
+                    
+                with latest_frame_lock:
+                    latest_frame = frame.copy()
+        except Exception as e:
+            print(f"[pipeline_thread] ERROR: {e}")
+            time.sleep(1.0)
+
 
 
 # Start the background thread immediately
@@ -69,8 +78,9 @@ def gen_frames():
             b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
         )
         
-        # Max client streaming rate (approx 20 fps) to avoid overloading network
-        time.sleep(0.05)
+        # Smooth streaming rate (approx 100 fps max, throttled by camera)
+        time.sleep(0.01)
+
 
 
 @app.route("/")
@@ -200,6 +210,26 @@ def _shutdown_server() -> None:
     func()
 
 
+@app.route("/start_camera", methods=["POST"])
+def start_camera():
+    """Start the campus camera monitoring."""
+    pipeline.start()
+    return {"status": "started"}, 200
+
+
+@app.route("/stop_camera", methods=["POST"])
+def stop_camera():
+    """Stop/Pause the campus camera monitoring."""
+    pipeline.stop()
+    return {"status": "stopped"}, 200
+
+
+@app.route("/camera_status", methods=["GET"])
+def camera_status():
+    """Check if the camera is currently monitoring."""
+    return {"running": pipeline.is_running()}, 200
+
+
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     """
@@ -209,6 +239,7 @@ def shutdown():
     pipeline.release()
     _shutdown_server()
     return "Campus safety server is stopping. You can close this tab.", 200
+
 
 
 if __name__ == "__main__":

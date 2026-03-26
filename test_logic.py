@@ -33,12 +33,26 @@ def run_tests():
     print("\n--- [2] Testing Fight Detector ---")
     f_detector = FightDetector()
     print(f"Feeding {f_detector.seq_len} frames to the model...")
-    for _ in range(f_detector.seq_len):
+    print(f"Smoothing window: {f_detector.SMOOTHING_WINDOW}")
+    for i in range(f_detector.seq_len):
         frame = np.random.randint(0, 255, (240, 320, 3), dtype=np.uint8)
         f_detector.update_frames(frame)
     
     prob = f_detector.predict_fight()
-    print(f"Fight probability on random noise: {prob:.4f}")
+    print(f"Fight probability on random noise (smoothed): {prob:.4f}")
+    print(f"  Raw prob:      {f_detector.last_raw_prob:.4f}")
+    print(f"  Smoothed prob: {f_detector.last_smoothed_prob:.4f}")
+    
+    # Run a few more predictions to test smoothing accumulation
+    for i in range(4):
+        frame = np.random.randint(0, 255, (240, 320, 3), dtype=np.uint8)
+        f_detector.update_frames(frame)
+        p = f_detector.predict_fight()
+        print(f"  Prediction {i+2}: raw={f_detector.last_raw_prob:.4f} smooth={f_detector.last_smoothed_prob:.4f}")
+    
+    # Test reset
+    f_detector.reset()
+    print(f"After reset: buffer={len(f_detector.tensor_buffer)}, prob={f_detector.last_smoothed_prob:.4f}")
 
     # 3. Test Risk Engine Logic
     print("\n--- [3] Testing Risk Engine Logic ---")
