@@ -25,6 +25,11 @@ class IncidentLogger:
         self.clips_dir = inc_cfg["clips_dir"]
         self.pre_event_sec = inc_cfg["pre_event_sec"]
         self.post_event_sec = inc_cfg["post_event_sec"]
+
+        # Smart Alerting: prevents spamming alerts for the same incident
+        self.COOLDOWN_SEC = 30.0
+        self._last_alert_time: float = 0.0
+
         self._ensure_log_file()
 
     def _ensure_log_file(self) -> None:
@@ -41,16 +46,25 @@ class IncidentLogger:
         event_type: str,
         location_name: str,
         clip_path: Optional[str],
-    ) -> None:
+    ) -> bool:
         """
         Append one incident row to the CSV log for the campus.
+        Returns True if logged, False if suppressed by cooldown.
         """
+        now = time.time()
+        if now - self._last_alert_time < self.COOLDOWN_SEC:
+            # Still in cooldown; don't log a new row for the same continuous event
+            return False
+
         ts = timestamp_str()
         details = "; ".join(risk.reasons)
         with open(self.log_csv, mode="a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([ts, risk.level.value, event_type, location_name, clip_path or "", details])
+        
+        self._last_alert_time = now
         print(f"[IncidentLogger] Logged incident at {ts}: {risk.level.value} ({event_type})")
+        return True
 
     def save_clip_from_buffer(
         self,

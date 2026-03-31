@@ -27,7 +27,7 @@ CONFIG = {
         "violence_model_weights": os.path.join(BASE_DIR, "models", "violence_cnn_lstm.pt"),
         # Default to CPU for broader compatibility; switch to "cuda"
         # if you have a compatible GPU and CUDA-enabled PyTorch.
-        "device": "cpu",
+        "device": "cuda",
     },
     "incidents": {
         "base_dir": os.path.join(BASE_DIR, "incidents"),

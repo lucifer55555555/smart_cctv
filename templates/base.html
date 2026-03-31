@@ -44,6 +44,65 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    // Global Smart Alert System
+    const AlertSystem = {
+        audioCtx: null,
+        
+        init() {
+            if (Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+            this.startPolling();
+        },
+
+        playSiren() {
+            if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = this.audioCtx.createOscillator();
+            const gain = this.audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, this.audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.5);
+            osc.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 1.0);
+            
+            gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 1.0);
+            
+            osc.connect(gain);
+            gain.connect(this.audioCtx.destination);
+            
+            osc.start();
+            osc.stop(this.audioCtx.currentTime + 1.0);
+        },
+
+        showNotification(alert) {
+            this.playSiren();
+            if (Notification.permission === "granted") {
+                new Notification(`⚠️ ${alert.level}: ${alert.event_type}`, {
+                    body: alert.details
+                });
+            }
+        },
+
+        startPolling() {
+            setInterval(() => {
+                fetch("/get_latest_alert")
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.level) {
+                            this.showNotification(data);
+                        }
+                    });
+            }, 3000);
+        }
+    };
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => AlertSystem.init());
+  </script>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>
