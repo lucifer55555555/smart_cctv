@@ -60,17 +60,17 @@ class RiskEngine:
             level = RiskLevel.NO_RISK
         elif has_weapon and has_fight:
             level = RiskLevel.CRITICAL
-            reasons.append("Weapon and fight detected in campus camera")
+            reasons.append("⚠️ CRITICAL: Active Violence and Weapon Detections in Campus Camera")
         elif has_weapon:
             level = RiskLevel.HIGH_RISK
             labels = ", ".join(set(d["label"] for d in weapon_detections))
             reasons.append(f"Weapon detected ({labels}) in campus camera")
         elif has_long_fight:
             level = RiskLevel.CRITICAL
-            reasons.append("Prolonged fight detected in campus camera")
+            reasons.append("Prolonged violence/fighting detected (Escalated to Critical)")
         else:
             level = RiskLevel.MEDIUM_RISK
-            reasons.append("Fight detected in campus camera")
+            reasons.append("Active fight/violence detected in campus camera")
 
         if has_fight:
             reasons.append(f"fight_prob={fight_prob:.2f}")

@@ -23,9 +23,20 @@
                 <button id="toggle-btn" class="btn btn-danger btn-sm" onclick="toggleCamera()">
                   <i class="bi bi-stop-circle me-1"></i>Stop Camera
                 </button>
+                <button class="btn btn-outline-warning btn-sm" onclick="testAlert()">
+                  <i class="bi bi-bell-fill me-1"></i>Test Alert
+                </button>
               </div>
             </div>
           </div>
+          
+          <script>
+            function testAlert() {
+                fetch("/test_alert", { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => console.log("Test alert triggered"));
+            }
+          </script>
           
           <div class="video-frame position-relative">
             <img id="video-feed" class="img-fluid rounded shadow-sm" src="{{ url_for('video_feed') }}" alt="Campus corridor or hostel gate feed">

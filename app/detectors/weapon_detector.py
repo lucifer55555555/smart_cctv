@@ -23,8 +23,8 @@ class WeaponDetector:
     """
 
     # A weapon must be detected in at least this many of the last N frames
-    CONFIRM_WINDOW = 5       # look at last 5 detection cycles
-    CONFIRM_MIN_HITS = 3     # need 3/5 hits to confirm a weapon is real
+    CONFIRM_WINDOW = 8       # Increased from 5 for better temporal stability
+    CONFIRM_MIN_HITS = 4     # Increased from 3 (need 50% hits normally)
 
     # Minimum bounding box area (pixels) — tiny boxes are likely noise
     MIN_BBOX_AREA = 1500
@@ -55,17 +55,22 @@ class WeaponDetector:
             print(f"[WeaponDetector] Could not load YOLO model: {e}")
             self.model = None
 
-    def _raw_detect(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+    def _raw_detect(self, frame: np.ndarray, fight_prob: float = 0.0) -> List[Dict[str, Any]]:
         """
         Run YOLO inference and return raw detections (before confirmation).
+        Dynamically adjusts confidence if a fight is happening to avoid false positives.
         """
         if self.model is None:
             return []
 
+        # If it's a fight, require extremely high weapon confidence (0.90+) to suppress
+        # fists/erratic body movements being predicted as weapons
+        current_conf = max(self.conf_threshold, 0.90) if fight_prob > 0.4 else self.conf_threshold
+
         try:
             results = self.model.predict(
                 source=frame,
-                conf=self.conf_threshold,
+                conf=current_conf,
                 device=self.device,
                 verbose=False,
                 imgsz=320,
@@ -105,7 +110,7 @@ class WeaponDetector:
 
         return detections
 
-    def detect_weapons(self, frame: np.ndarray) -> List[Dict[str, Any]]:
+    def detect_weapons(self, frame: np.ndarray, fight_prob: float = 0.0) -> List[Dict[str, Any]]:
         """
         Run YOLOv8 on a BGR frame with multi-frame confirmation.
 
@@ -113,10 +118,13 @@ class WeaponDetector:
         CONFIRM_MIN_HITS of the last CONFIRM_WINDOW frames.
         This eliminates single-frame false positives from fights.
         """
-        raw_dets = self._raw_detect(frame)
+        raw_dets = self._raw_detect(frame, fight_prob=fight_prob)
         self._detection_history.append(raw_dets)
 
-        if len(self._detection_history) < self.CONFIRM_MIN_HITS:
+        # Dynamic confirmation logic: require nearly perfect hits (7/8) during a likely fight
+        required_hits = 7 if fight_prob > 0.4 else self.CONFIRM_MIN_HITS
+
+        if len(self._detection_history) < required_hits:
             # Not enough history yet — be conservative, don't report
             return []
 
@@ -125,7 +133,7 @@ class WeaponDetector:
             1 for dets in self._detection_history if len(dets) > 0
         )
 
-        if frames_with_weapons >= self.CONFIRM_MIN_HITS:
+        if frames_with_weapons >= required_hits:
             # Confirmed: weapons detected consistently. Return current detections.
             if raw_dets:
                 for d in raw_dets:

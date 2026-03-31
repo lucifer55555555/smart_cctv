@@ -50,6 +50,9 @@ class CampusSafetyPipeline:
         self._pending_event = None
         self._frame_count = 0
 
+        # Smart Alerting: stores the last incident to be fetched by the web UI
+        self.latest_incident: Optional[Dict[str, Any]] = None
+
         # Background thread for HEAVY detections (violence)
         self._worker_thread = threading.Thread(target=self._background_fight_worker, daemon=True)
         self._worker_thread.start()
@@ -99,13 +102,13 @@ class CampusSafetyPipeline:
                 has_fight = risk.fight_prob >= self.risk_engine.fight_threshold
 
                 if has_weapon and has_fight:
-                    event_type = "campus_weapon_and_fight"
+                    event_type = "campus_violence_with_weapon"
                 elif has_weapon:
-                    event_type = "campus_weapon"
+                    event_type = "campus_weapon_alert"
                 elif has_fight:
-                    event_type = "campus_fight"
+                    event_type = "campus_violence_alert"
                 else:
-                    event_type = "campus_alert"
+                    event_type = "campus_general_alert"
 
                 self._pending_event = {
                     "event_time": now,
@@ -119,12 +122,22 @@ class CampusSafetyPipeline:
             event_type = str(self._pending_event["event_type"])
             event_risk: RiskResult = self._pending_event["risk"]
             clip_path = self.logger.save_clip_from_buffer(self.video_buffer, event_time=event_time)
-            self.logger.log_incident(
+            logged = self.logger.log_incident(
                 risk=event_risk,
                 event_type=event_type,
                 location_name=self.location_name,
                 clip_path=clip_path,
             )
+
+            if logged:
+                # Update latest_incident for the web UI/Polling
+                self.latest_incident = {
+                    "timestamp": time.time(),
+                    "level": event_risk.level.value,
+                    "event_type": event_type,
+                    "details": "; ".join(event_risk.reasons)
+                }
+
             self._pending_event = None
 
         self._prev_risk_level = risk.level
@@ -169,7 +182,7 @@ class CampusSafetyPipeline:
 
                 # 1. Process weapons only every 3RD frame to keep smoothness
                 if self._frame_count % 3 == 0:
-                    weapon_dets = self.weapon_detector.detect_weapons(frame)
+                    weapon_dets = self.weapon_detector.detect_weapons(frame, fight_prob=self._last_fight_prob)
                     with self._lock:
                         self._last_weapon_dets = weapon_dets
                         self._latest_unprocessed_frame = frame

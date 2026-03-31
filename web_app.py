@@ -230,6 +230,34 @@ def camera_status():
     return {"running": pipeline.is_running()}, 200
 
 
+@app.route("/get_latest_alert", methods=["GET"])
+def get_latest_alert():
+    """
+    Returns the most recent incident to the frontend for real-time notifications.
+    Clears it after reading to ensure a single notification per alert.
+    """
+    alert = pipeline.latest_incident
+    # Optional: only return if it's "fresh" (last 10 seconds)
+    if alert and (time.time() - alert["timestamp"] < 10.0):
+        # Clear it so it won't be alerted again on next poll
+        pipeline.latest_incident = None
+        return alert, 200
+    
+    return {}, 200
+
+
+@app.route("/test_alert", methods=["POST"])
+def test_alert():
+    """Trigger a dummy incident for notification testing."""
+    pipeline.latest_incident = {
+        "timestamp": time.time(),
+        "level": "CRITICAL",
+        "event_type": "test_alert_simulation",
+        "details": "This is a simulated smart alert for testing notifications."
+    }
+    return {"status": "triggered"}, 200
+
+
 @app.route("/shutdown", methods=["POST"])
 def shutdown():
     """
