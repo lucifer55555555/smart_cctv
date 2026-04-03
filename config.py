@@ -1,4 +1,5 @@
 import os
+import torch
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,18 +17,17 @@ CONFIG = {
         "fps": 20,
     },
     "detection": {
-        "weapon_conf_threshold": 0.75,
-        "fight_prob_threshold": 0.5,
-        "min_fight_duration_sec": 2.0,
+        "weapon_conf_threshold": 0.60,
+        "fight_prob_threshold": 0.49,
+        "min_fight_duration_sec": 4.0,
         # Match exported TorchScript violence model: 30-frame sequences
         "sequence_length": 30,
     },
     "models": {
         "weapon_yolo_weights": os.path.join(BASE_DIR, "models", "weapon_yolo.pt"),
         "violence_model_weights": os.path.join(BASE_DIR, "models", "violence_cnn_lstm.pt"),
-        # Default to CPU for broader compatibility; switch to "cuda"
-        # if you have a compatible GPU and CUDA-enabled PyTorch.
-        "device": "cuda",
+        # Default to CPU for broader compatibility; auto-detect CUDA
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
     },
     "incidents": {
         "base_dir": os.path.join(BASE_DIR, "incidents"),

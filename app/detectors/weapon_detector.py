@@ -22,12 +22,12 @@ class WeaponDetector:
     fights (e.g., fists/limbs misclassified as weapons).
     """
 
-    # A weapon must be detected in at least this many of the last N frames
-    CONFIRM_WINDOW = 8       # Increased from 5 for better temporal stability
-    CONFIRM_MIN_HITS = 4     # Increased from 3 (need 50% hits normally)
-
-    # Minimum bounding box area (pixels) — tiny boxes are likely noise
-    MIN_BBOX_AREA = 1500
+    # A weapon must be detected in at least this many of last N frames
+    CONFIRM_WINDOW = 8         # Increased for better stability
+    CONFIRM_MIN_HITS = 2       # Base hits required
+ 
+    # Minimum bounding box area (pixels) — tiny boxes in low-conf are likely noise
+    MIN_BBOX_AREA = 1500       # Raised again to filter out smaller false-positive limb shapes
 
     def __init__(self) -> None:
         self.conf_threshold = CONFIG["detection"]["weapon_conf_threshold"]
@@ -37,6 +37,8 @@ class WeaponDetector:
 
         # Rolling history of raw detections for confirmation logic
         self._detection_history: Deque[List[Dict[str, Any]]] = deque(maxlen=self.CONFIRM_WINDOW)
+        # Store last seen non-empty detections to bridge frames while confirmed
+        self._last_valid_dets: List[Dict[str, Any]] = []
 
         if not _ULTRALYTICS_AVAILABLE:
             print("[WeaponDetector] ultralytics not installed; running in dummy mode.")
@@ -58,14 +60,12 @@ class WeaponDetector:
     def _raw_detect(self, frame: np.ndarray, fight_prob: float = 0.0) -> List[Dict[str, Any]]:
         """
         Run YOLO inference and return raw detections (before confirmation).
-        Dynamically adjusts confidence if a fight is happening to avoid false positives.
         """
         if self.model is None:
             return []
 
-        # If it's a fight, require extremely high weapon confidence (0.90+) to suppress
-        # fists/erratic body movements being predicted as weapons
-        current_conf = max(self.conf_threshold, 0.90) if fight_prob > 0.4 else self.conf_threshold
+        # Use the standard model threshold (0.60 as recommended)
+        current_conf = self.conf_threshold
 
         try:
             results = self.model.predict(
@@ -73,7 +73,7 @@ class WeaponDetector:
                 conf=current_conf,
                 device=self.device,
                 verbose=False,
-                imgsz=320,
+                imgsz=640,    # Higher resolution for better small-object detection
             )
         except Exception as e:  # noqa: BLE001
             print(f"[WeaponDetector] Inference failed: {e}")
@@ -90,14 +90,21 @@ class WeaponDetector:
                 label = names.get(cls_id, str(cls_id))
                 conf = float(box.conf.item())
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
+                bbox_area = (x2 - x1) * (y2 - y1)
+
+                # DEBUG: Log ALL raw detections so we can see what the model outputs
+                print(f"[WeaponDetector RAW] cls={cls_id} label='{label}' conf={conf:.3f} area={bbox_area:.0f}")
 
                 # Filter by weapon-like labels
-                if not any(k in label.lower() for k in ["gun", "weapon", "pistol", "rifle", "knife", "dagger", "sharp", "handgun"]):
+                weapon_keywords = ["gun", "weapon", "pistol", "rifle", "knife",
+                                   "dagger", "sharp", "handgun", "blade",
+                                   "machete", "sword", "firearm", "revolver"]
+                if not any(k in label.lower() for k in weapon_keywords):
                     continue
 
                 # Filter by minimum bounding box area
-                bbox_area = (x2 - x1) * (y2 - y1)
                 if bbox_area < self.MIN_BBOX_AREA:
+                    print(f"[WeaponDetector] Skipped {label} — bbox too small ({bbox_area:.0f} < {self.MIN_BBOX_AREA})")
                     continue
 
                 detections.append(
@@ -121,26 +128,41 @@ class WeaponDetector:
         raw_dets = self._raw_detect(frame, fight_prob=fight_prob)
         self._detection_history.append(raw_dets)
 
-        # Dynamic confirmation logic: require nearly perfect hits (7/8) during a likely fight
-        required_hits = 7 if fight_prob > 0.4 else self.CONFIRM_MIN_HITS
+        # Label-Specific Stability Rules:
+        # - Knife: 2 hits (fast/responsive for your primary use-case)
+        # - Others (Gun/Pistol): 4 hits (stronger filter for fight-limb false positives)
+        
+        def get_required_hits(label: str) -> int:
+            if "knife" in label.lower() or "blade" in label.lower():
+                return 2
+            return 4
 
-        if len(self._detection_history) < required_hits:
-            # Not enough history yet — be conservative, don't report
-            return []
+        # Process each current detection against its specific history requirement
+        final_dets = []
+        for d in raw_dets:
+            label = d["label"]
+            req = get_required_hits(label)
+            
+            # Count how many of the last N frames had THIS specific label (or similar)
+            hits = sum(1 for frame_dets in self._detection_history 
+                       if any(label.lower() in fd["label"].lower() or fd["label"].lower() in label.lower() for fd in frame_dets))
+            
+            if hits >= req:
+                final_dets.append(d)
+                print(f"[WeaponDetector CONFIRMED] {label} ({d['confidence']:.2f}) with {hits}/{req} hits")
 
-        # Count how many recent frames had ANY weapon detection
-        frames_with_weapons = sum(
-            1 for dets in self._detection_history if len(dets) > 0
-        )
-
-        if frames_with_weapons >= required_hits:
-            # Confirmed: weapons detected consistently. Return current detections.
-            if raw_dets:
-                for d in raw_dets:
-                    print(f"[WeaponDetector CONFIRMED] {d['label']} ({d['confidence']:.2f}) over {frames_with_weapons}/{len(self._detection_history)} frames")
-            return raw_dets
+        if final_dets:
+            self._last_valid_dets = final_dets
+            return final_dets
         else:
-            # Not enough consistency — likely false positive from fight motion
-            if raw_dets:
-                print(f"[WeaponDetector REJECTED] {len(raw_dets)} detection(s) — only {frames_with_weapons}/{len(self._detection_history)} frames consistent")
-            return []
+            # PERSISTENCE: If we were confirmed in the very recent past, stay alert for a moment
+            # This bridges tiny single-frame gaps to keep the red box stable
+            confirm_frames = sum(1 for frame_dets in self._detection_history if len(frame_dets) > 0)
+            if confirm_frames >= 3 and self._last_valid_dets:
+                print(f"[WeaponDetector PERSISTED] Showing last seen {len(self._last_valid_dets)} box(es) — still confirmed ({confirm_frames} total hits)")
+                return self._last_valid_dets
+            else:
+                self._last_valid_dets = []
+                if raw_dets:
+                     print(f"[WeaponDetector REJECTED] {len(raw_dets)} detection(s) — failed hit requirements")
+                return []

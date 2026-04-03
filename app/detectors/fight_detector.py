@@ -18,12 +18,12 @@ class FightDetector:
     and smooths predictions over a rolling window to prevent flickering.
     """
 
-    # Number of recent predictions to average for smoothing
-    SMOOTHING_WINDOW = 5
+    # Smoothing window: use a moderate window so we see real model output
+    SMOOTHING_WINDOW = 8
 
     def __init__(self) -> None:
         self.seq_len = CONFIG["detection"]["sequence_length"]
-        self.prob_threshold = CONFIG["detection"]["fight_prob_threshold"]
+        self.prob_threshold = 0.49
         self.device = CONFIG["models"]["device"]
         self.weights_path = CONFIG["models"]["violence_model_weights"]
 
@@ -93,11 +93,13 @@ class FightDetector:
         try:
             # Efficiently stack already preprocessed tensors
             # Resulting shape: (1, T, C, H, W)
-            x = torch.stack(list(self.tensor_buffer), dim=0).unsqueeze(0).to(self.device).contiguous()
+            # Use .clone().contiguous() to ensure memory is perfectly laid out for TorchScript
+            x = torch.stack(list(self.tensor_buffer), dim=0).unsqueeze(0).to(self.device).clone().contiguous()
 
             with torch.no_grad():
                 logits = self.model(x)
-                prob = torch.sigmoid(logits)
+                # Ensure the output is on CPU for sigmoid/item
+                prob = torch.sigmoid(logits).cpu()
                 raw_prob = float(prob.item())
 
         except Exception as e:
@@ -107,9 +109,12 @@ class FightDetector:
         self.last_raw_prob = raw_prob
         self._prob_history.append(raw_prob)
 
-        # Smoothed probability = weighted moving average (more recent = higher weight)
-        weights = np.arange(1, len(self._prob_history) + 1, dtype=np.float64)
-        smoothed = float(np.average(list(self._prob_history), weights=weights))
+        # Simple weighted average — more recent frames count more.
+        # DO NOT clamp or suppress the score; let the real model output through.
+        weights = list(range(1, len(self._prob_history) + 1))
+        total_w = sum(weights)
+        smoothed = sum(w * p for w, p in zip(weights, self._prob_history)) / total_w
+
         self.last_smoothed_prob = smoothed
 
         return smoothed

@@ -5,4 +5,8 @@ models/*.pth
 *.pt
 __pycache__/
 *.pyc
+incidents/
+*.mp4
+*.mkv
+*.avi
 

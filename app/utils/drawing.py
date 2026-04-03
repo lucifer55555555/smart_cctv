@@ -4,6 +4,7 @@ import cv2
 import time
 
 from app.risk.risk_engine import RiskResult, RiskLevel
+from config import CONFIG
 
 
 def _risk_color(level: RiskLevel) -> tuple[int, int, int]:
@@ -71,7 +72,8 @@ def draw_risk_overlay(
 
     # Fight probability indicator bar
     if risk.fight_prob > 0.0:
-        bar_label = f"Fight: {risk.fight_prob:.0%}"
+        thresh = CONFIG["detection"]["fight_prob_threshold"]
+        bar_label = f"Fight: {risk.fight_prob:.0%} (Thr: {thresh:.0%})"
         bar_w = int((w - 20) * min(risk.fight_prob, 1.0))
 
         # Background bar (dark)
