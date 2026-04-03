@@ -49,39 +49,112 @@
     // Global Smart Alert System
     const AlertSystem = {
         audioCtx: null,
-        
+        audioUnlocked: false,
+
+        // Call this first — browsers block audio until a user gesture
+        unlockAudio() {
+            if (this.audioUnlocked) return;
+            if (!this.audioCtx) {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            // Resume in case context is suspended
+            if (this.audioCtx.state === 'suspended') {
+                this.audioCtx.resume();
+            }
+            this.audioUnlocked = true;
+            console.log('[AlertSystem] Audio unlocked ✓');
+        },
+
         init() {
+            // Unlock audio on first click anywhere on page
+            document.addEventListener('click', () => this.unlockAudio(), { once: true });
+            document.addEventListener('keydown', () => this.unlockAudio(), { once: true });
+
             if (Notification.permission !== "granted") {
                 Notification.requestPermission();
             }
             this.startPolling();
         },
 
-        playSiren() {
-            if (!this.audioCtx) this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = this.audioCtx.createOscillator();
-            const gain = this.audioCtx.createGain();
-            
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(440, this.audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(880, this.audioCtx.currentTime + 0.5);
-            osc.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 1.0);
-            
-            gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + 1.0);
-            
-            osc.connect(gain);
-            gain.connect(this.audioCtx.destination);
-            
-            osc.start();
-            osc.stop(this.audioCtx.currentTime + 1.0);
+        playSiren(level) {
+            // Ensure audio context exists and is running
+            if (!this.audioCtx) {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (this.audioCtx.state === 'suspended') {
+                this.audioCtx.resume();
+            }
+
+            const ctx = this.audioCtx;
+            const now = ctx.currentTime;
+
+            // Choose frequency based on severity
+            const isCritical = level === 'CRITICAL';
+            const baseFreq = isCritical ? 880 : 660;
+            const topFreq  = isCritical ? 1760 : 1100;
+
+            // Play 2 siren pulses
+            for (let i = 0; i < 2; i++) {
+                const osc  = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'sawtooth';  // harsher than sine — more attention-grabbing
+                const t = now + i * 0.8;
+                osc.frequency.setValueAtTime(baseFreq, t);
+                osc.frequency.exponentialRampToValueAtTime(topFreq,  t + 0.35);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq, t + 0.7);
+
+                gain.gain.setValueAtTime(0.35, t);        // louder volume
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.8);
+            }
+        },
+
+        showBanner(alert) {
+            // Remove any existing banner
+            const old = document.getElementById('alert-banner');
+            if (old) old.remove();
+
+            const colors = {
+                'CRITICAL':   '#c0392b',
+                'HIGH_RISK':  '#e67e22',
+                'MEDIUM_RISK':'#f1c40f',
+            };
+            const bg = colors[alert.level] || '#e74c3c';
+
+            const banner = document.createElement('div');
+            banner.id = 'alert-banner';
+            banner.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+                background: ${bg}; color: #fff; padding: 12px 20px;
+                font-weight: bold; font-size: 16px;
+                display: flex; justify-content: space-between; align-items: center;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+                animation: pulse-banner 0.5s alternate infinite;
+            `;
+            banner.innerHTML = `
+                <span>🚨 ${alert.level.replace('_', ' ')}: ${alert.event_type} — ${alert.details}</span>
+                <button onclick="this.parentElement.remove()" style="
+                    background:none; border:1px solid #fff; color:#fff;
+                    padding: 3px 10px; cursor:pointer; border-radius:4px;">✕ Dismiss</button>
+            `;
+            document.body.prepend(banner);
+
+            // Auto-dismiss after 15 seconds
+            setTimeout(() => { if (banner.parentElement) banner.remove(); }, 15000);
         },
 
         showNotification(alert) {
-            this.playSiren();
+            this.playSiren(alert.level);
+            this.showBanner(alert);
             if (Notification.permission === "granted") {
-                new Notification(`⚠️ ${alert.level}: ${alert.event_type}`, {
-                    body: alert.details
+                new Notification(`🚨 ${alert.level}: ${alert.event_type}`, {
+                    body: alert.details,
+                    icon: '/static/img/shield.png'
                 });
             }
         },
@@ -92,12 +165,19 @@
                     .then(r => r.json())
                     .then(data => {
                         if (data.level) {
+                            console.log('[AlertSystem] Alert received:', data.level, data.event_type);
                             this.showNotification(data);
                         }
-                    });
+                    })
+                    .catch(err => console.warn('[AlertSystem] Poll error:', err));
             }, 3000);
         }
     };
+
+    // Pulse animation for banner
+    const style = document.createElement('style');
+    style.textContent = `@keyframes pulse-banner { from { opacity:1; } to { opacity:0.85; } }`;
+    document.head.appendChild(style);
 
     // Initialize on load
     document.addEventListener('DOMContentLoaded', () => AlertSystem.init());

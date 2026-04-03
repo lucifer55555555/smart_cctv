@@ -72,7 +72,8 @@ class CampusSafetyPipeline:
                 with self._lock:
                     self._last_fight_prob = fight_prob
 
-            time.sleep(0.1)  # 10Hz for violence detection is plenty
+            # No sleep here: process as fast as the GPU allows to capture high-speed motion
+            time.sleep(0.01) 
 
     def _compute_risk(self, weapon_dets: List[Dict[str, Any]], fight_prob: float) -> RiskResult:
         """
@@ -180,18 +181,17 @@ class CampusSafetyPipeline:
                 self._frame_count += 1
                 self.video_buffer.add_frame(frame)
 
-                # 1. Process weapons only every 3RD frame to keep smoothness
-                if self._frame_count % 3 == 0:
-                    weapon_dets = self.weapon_detector.detect_weapons(frame, fight_prob=self._last_fight_prob)
-                    with self._lock:
-                        self._last_weapon_dets = weapon_dets
-                        self._latest_unprocessed_frame = frame
-                        fight_prob = self._last_fight_prob
-                else:
-                    # Skip: use PREVIOUS detections for zero-lag display
-                    with self._lock:
-                        weapon_dets = self._last_weapon_dets
-                        fight_prob = self._last_fight_prob
+                # 1. Run weapon detection on EVERY frame for maximum responsiveness
+                weapon_dets = self.weapon_detector.detect_weapons(frame, fight_prob=self._last_fight_prob)
+                with self._lock:
+                    self._last_weapon_dets = weapon_dets
+                    self._latest_unprocessed_frame = frame
+                    fight_prob = self._last_fight_prob
+
+                # Debug: log fight probability periodically
+                if self._frame_count % 30 == 0:
+                    print(f"[Pipeline DEBUG] frame={self._frame_count} fight_prob={fight_prob:.4f} weapons={len(weapon_dets)}")
+
 
                 # 2. SINGLE risk evaluation combining both detectors
                 risk = self._compute_risk(weapon_dets, fight_prob)
