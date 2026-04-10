@@ -1,119 +1,160 @@
-# 🎯 Smart-CCTV Campus Safety System
+# 🛡️ Smart CCTV – AI-Powered Campus Safety System
 
-> AI-powered surveillance that detects weapons and violence in real-time — built for campus security teams.
-
-Smart-CCTV fuses two deep learning models into a single threat-assessment pipeline. It watches a live camera feed, identifies weapons and fighting, assigns a risk level, and automatically saves an incident clip + log entry the moment something goes wrong.
+> Real-time surveillance system that detects **weapons and violent activity using YOLO models**, assigns risk levels, and automatically logs incidents.
 
 ---
 
-## How It Works
+## 🎯 Overview
 
-Before the system can run, **both models must exist** in the `models/` folder. One is trained by you using the provided script; the other must be sourced or trained separately.
+Smart CCTV is an intelligent video surveillance system designed for **campus safety and security monitoring**.
+
+It processes live camera feeds, detects threats using **two YOLO-based models**, evaluates risk, and automatically records incidents with video evidence.
+
+---
+
+## ⚙️ System Pipeline
 
 ```
-STEP 0 — Train / Obtain Models
+STEP 0 — Load Models
         │
-        ├── weapon_yolo.pt       ← train using train_roboflow.py (instructions below)
-        └── violence_cnn_lstm.pt ← TorchScript CNN+LSTM model (source/train separately)
+        ├── weapon_yolo.pt     (YOLOv8 – weapon detection)
+        └── violence_yolo.pt   (YOLOv8 – fight detection)
                 │
                 ▼
-STEP 1 — Camera Feed  (webcam or RTSP stream)
+STEP 1 — Camera Feed
+        Webcam / RTSP Stream
                 │
                 ▼
-STEP 2 — Detection  (two models run in parallel)
+STEP 2 — Detection (Parallel)
         │
-        ├── WeaponDetector  [SYNC, every frame]
-        │     YOLOv8 → bounding boxes → multi-frame confirmation filter
+        ├── Weapon Detector   → bounding boxes (guns, knives)
+        └── Violence Detector → detects fight activity
+                │
+                ▼
+STEP 3 — Risk Engine
+        Combines detections into:
+        NO_RISK / MEDIUM / HIGH / CRITICAL
+                │
+                ▼
+STEP 4 — Incident Handling
         │
-        └── FightDetector   [ASYNC, background thread]
-              CNN+LSTM → 30-frame sequence → smoothed violence probability
+        ├── VideoBuffer → saves clip (pre + post event)
+        └── IncidentLogger → logs to CSV
                 │
                 ▼
-STEP 3 — RiskEngine  (combines both detector outputs)
-              NO_RISK / MEDIUM_RISK / HIGH_RISK / CRITICAL
-                │
-                ▼
-STEP 4 — Incident Handling  (only on threat)
-        │
-        ├── VideoBuffer  → saves MP4 clip (5s before + 5s after the trigger)
-        └── IncidentLogger → appends row to incidents/logs/incidents.csv
-                │
-                ▼
-STEP 5 — Web Dashboard  (Flask, runs at localhost:5000)
-              Live feed · Incident log · Analytics dashboard
+STEP 5 — Web Dashboard (Flask)
+        Live Feed · Logs · Monitoring UI
 ```
 
 ---
 
-## The Two Models
+## 🧠 Models Used
 
-| | `weapon_yolo.pt` | `violence_cnn_lstm.pt` |
-|---|---|---|
-| **What it detects** | Guns, knives, blades, rifles, etc. | Fighting / violent activity |
-| **Architecture** | YOLOv8 (Ultralytics) | CNN + LSTM (TorchScript) |
-| **Loaded with** | `YOLO(path)` | `torch.jit.load(path)` |
-| **Input** | Single BGR frame | Sequence of 30 `(3×224×224)` tensors |
-| **Output** | Bounding boxes + labels + confidence | Single float — violence probability |
-| **Runs on** | Main thread (every frame) | Background daemon thread |
-| **Trained via** | `train_roboflow.py` ✅ | Must be sourced / trained separately |
-| **In repo?** | ✅ `models/weapon_yolo.pt` | ❌ Not included — must be added |
+| Model              | Purpose                               | Type   |
+| ------------------ | ------------------------------------- | ------ |
+| `weapon_yolo.pt`   | Detect weapons (guns, knives, blades) | YOLOv8 |
+| `violence_yolo.pt` | Detect fights / violent activity      | YOLOv8 |
 
-> If either model file is missing, that detector silently enters a safe no-detection mode. The system will not crash.
+> Both models run on **each frame**, enabling fast real-time inference.
 
 ---
 
-## Risk Levels
+## 🚀 Features
 
-The `RiskEngine` combines both detectors into one threat level per frame:
-
-| Situation | Level |
-|---|---|
-| Nothing detected | `NO_RISK` |
-| Fight probability above threshold | `MEDIUM_RISK` |
-| Weapon detected, no fight | `HIGH_RISK` |
-| Weapon + fight, **or** fight lasting ≥ 4 seconds | `CRITICAL` |
+* 🎥 Live video streaming via Flask
+* 🔫 Weapon detection using YOLOv8
+* 🥊 Violence detection using YOLOv8
+* ⚠️ Risk-level classification engine
+* 🎬 Automatic incident recording (video clips)
+* 🗂️ CSV-based incident logging
+* 🔁 Continuous real-time processing pipeline
 
 ---
 
-## Installation
+## 🏗️ Project Structure
 
-**Prerequisites:** Python 3.9+, and a CUDA GPU is recommended (CPU fallback is automatic).
+```
+smart_cctv/
+├── web_app.py                  # Flask web interface
+├── main.py                     # CLI runner
+├── config.py                   # Configurations
+├── train_roboflow.py           # Weapon training script
+│
+├── app/
+│   ├── pipeline.py             # Core pipeline
+│   ├── camera_stream.py        # Camera handling
+│   │
+│   ├── detectors/
+│   │   ├── weapon_detector.py
+│   │   └── fight_detector.py
+│   │
+│   ├── risk/
+│   │   └── risk_engine.py
+│   │
+│   └── logging_utils/
+│       ├── incident_logger.py
+│       └── video_buffer.py
+│
+├── models/
+│   ├── weapon_yolo.pt
+│   └── violence_yolo.pt
+│
+└── incidents/
+    ├── clips/
+    └── logs/incidents.csv
+```
+
+---
+
+## ⚙️ Installation
+
+### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-org/smart_cctv.git
+git clone https://github.com/your-repo/smart_cctv.git
 cd smart_cctv
+```
+
+### 2. Create Virtual Environment
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
 ---
 
-## Training the Weapon Detection Model
+## 🧠 Model Training
 
-The YOLO weapon model is trained on a dataset from [Roboflow Universe](https://universe.roboflow.com). A ready-made script is included.
+Both detections use **YOLOv8**, ensuring a unified and efficient pipeline.
 
-**1. Get a Roboflow API key** from your account settings at roboflow.com.
+---
 
-**2. Find a weapon-detection dataset** on Roboflow Universe (search "weapon detection"). Note the workspace name, project name, and version number from its URL.
+### 🔫 Weapon Detection Training (Roboflow)
 
-**3. Edit `train_roboflow.py`** with your details:
+#### 1. Configure `train_roboflow.py`
 
 ```python
-ROBOFLOW_API_KEY = "your_key_here"
-WORKSPACE_NAME   = "your-workspace"
-PROJECT_NAME     = "your-project-name"
+ROBOFLOW_API_KEY = "your_key"
+WORKSPACE_NAME   = "workspace"
+PROJECT_NAME     = "weapon-dataset"
 VERSION_NUMBER   = 1
 ```
 
-**4. Run the training script:**
+#### 2. Train
 
 ```bash
 pip install roboflow
 python train_roboflow.py
 ```
 
-Training uses `yolov8n.pt` (YOLOv8 Nano) — fastest for CCTV use. Switch to `yolov8s.pt` in the script for better accuracy at the cost of speed. Training runs for 50 epochs at 640×640 resolution.
-
-**5. Copy the output weights into the models folder:**
+#### 3. Save Model
 
 ```bash
 cp runs/detect/train/weights/best.pt models/weapon_yolo.pt
@@ -121,110 +162,140 @@ cp runs/detect/train/weights/best.pt models/weapon_yolo.pt
 
 ---
 
-## Obtaining the Violence Detection Model
+### 🥊 Violence Detection Training (YOLO)
 
-The `violence_cnn_lstm.pt` model is a **TorchScript CNN+LSTM** trained on a violence/fight video dataset. It is not included in this repository and must be sourced or trained separately.
-
-Once you have it, place it here:
+#### Dataset Structure
 
 ```
-models/violence_cnn_lstm.pt
+dataset/
+├── images/train
+├── images/val
+├── labels/train
+├── labels/val
+└── data.yaml
 ```
 
-The model must accept input of shape `(1, 30, 3, 224, 224)` and output a single logit (before sigmoid).
+#### Train Model
+
+```bash
+yolo detect train \
+  model=yolov8n.pt \
+  data=dataset/data.yaml \
+  epochs=50 \
+  imgsz=640
+```
+
+#### Save Model
+
+```bash
+cp runs/detect/train/weights/best.pt models/violence_yolo.pt
+```
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
-All settings live in `config.py`:
+Edit `config.py`:
 
 ```python
 "camera": {
-    "source": 0,                          # 0 = webcam, or an RTSP URL string
-    "location_name": "AIML corridor 1st floor",
-    "fps": 20,
+    "source": 0,
+    "fps": 20
 },
-"detection": {
-    "weapon_conf_threshold": 0.60,        # YOLO minimum confidence
-    "fight_prob_threshold": 0.49,         # Violence model minimum probability
-    "min_fight_duration_sec": 4.0,        # Seconds of fighting before escalating to CRITICAL
-    "sequence_length": 30,                # Frames per CNN+LSTM inference
-},
-"incidents": {
-    "pre_event_sec": 5,                   # Seconds of pre-incident footage to capture
-    "post_event_sec": 5,
-},
-```
 
-For an RTSP camera, replace `source: 0` with the full stream URL:
-```python
-"source": "rtsp://user:pass@192.168.1.100:554/stream1"
+"detection": {
+    "weapon_conf_threshold": 0.6,
+    "violence_conf_threshold": 0.5
+},
+
+"models": {
+    "weapon_model": "models/weapon_yolo.pt",
+    "violence_model": "models/violence_yolo.pt"
+}
 ```
 
 ---
 
-## Running
+## ▶️ Running the System
 
-**Web Dashboard** (recommended) — starts everything, accessible in the browser:
+### Web Dashboard (Recommended)
 
 ```bash
 python web_app.py
 ```
 
-Open `http://localhost:5000` — live feed, incident log, and analytics are all there.
+Open:
 
-**Headless mode** — detection + logging only, shows an OpenCV window locally:
+```
+http://127.0.0.1:5000
+```
+
+---
+
+### CLI Mode
 
 ```bash
 python main.py
 ```
 
-Press **`q`** to stop.
+---
+
+## ⚠️ Risk Levels
+
+| Condition        | Risk     |
+| ---------------- | -------- |
+| Nothing detected | NO_RISK  |
+| Fight detected   | MEDIUM   |
+| Weapon detected  | HIGH     |
+| Weapon + Fight   | CRITICAL |
 
 ---
 
-## Project Structure
+## 📊 Output
+
+* 🎬 Video clips saved in:
 
 ```
-smart_cctv/
-├── main.py                     # Headless runner
-├── web_app.py                  # Flask web app
-├── config.py                   # All configuration
-├── train_roboflow.py           # Script to train the weapon YOLO model
-│
-├── app/
-│   ├── pipeline.py             # Core orchestration
-│   ├── camera_stream.py        # Camera / RTSP capture (threaded)
-│   ├── detectors/
-│   │   ├── weapon_detector.py  # YOLOv8 + multi-frame confirmation
-│   │   └── fight_detector.py   # CNN+LSTM + smoothing
-│   ├── risk/
-│   │   └── risk_engine.py      # Threat level logic
-│   └── logging_utils/
-│       ├── incident_logger.py  # CSV log + MP4 clip writer
-│       └── video_buffer.py     # Rolling ring-buffer
-│
-├── models/
-│   ├── weapon_yolo.pt          # ✅ Included (train via train_roboflow.py)
-│   └── violence_cnn_lstm.pt    # ❌ Must be added manually
-│
-└── incidents/
-    ├── clips/                  # Saved incident .mp4 files
-    └── logs/incidents.csv      # Master incident log
+incidents/clips/
+```
+
+* 📄 Logs saved in:
+
+```
+incidents/logs/incidents.csv
 ```
 
 ---
 
-## Requirements
+## 📦 Requirements
 
 ```
-flask>=2.0.0
-numpy>=1.21.0
-opencv-python>=4.5.3
-torch>=1.9.0
-torchvision>=0.10.0
-ultralytics>=8.0.0
+flask
+numpy
+opencv-python
+torch
+torchvision
+ultralytics
 ```
 
-> Install `roboflow` additionally only if you are running `train_roboflow.py`.
+---
+
+## 🔮 Future Improvements
+
+* Multi-camera support
+* Email/SMS alerts
+* Face recognition
+* Cloud deployment
+* Mobile app dashboard
+
+---
+
+## 👨‍💻 Author
+
+Krish Agrawal
+
+---
+
+## 📄 License
+
+For educational and research purposes.
