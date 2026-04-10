@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Live Monitor - {{ location_name }}{% endblock %}
+
+{% block content %}
+  <div class="row g-4">
+    <div class="col-12 col-lg-8">
+      <div class="card panel-card">
+        <div class="card-body">
+          <div class="row align-items-center mb-3">
+            <div class="col-md-6">
+              <h3 class="mb-0">Live Campus Camera</h3>
+              <div class="text-muted small">Corridor / hostel gate monitoring feed</div>
+            </div>
+            <div class="col-md-6 text-md-end mt-2 mt-md-0">
+              <div class="d-flex flex-wrap justify-content-md-end gap-2">
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('dashboard') }}">
+                  <i class="bi bi-graph-up-arrow me-1"></i>Dashboard
+                </a>
+                <a class="btn btn-primary btn-sm" href="{{ url_for('incidents') }}">
+                  <i class="bi bi-journal-text me-1"></i>Incidents
+                </a>
+                <button id="toggle-btn" class="btn btn-danger btn-sm" onclick="toggleCamera()">
+                  <i class="bi bi-stop-circle me-1"></i>Stop Camera
+                </button>
+                <button class="btn btn-outline-warning btn-sm" onclick="testAlert()">
+                  <i class="bi bi-bell-fill me-1"></i>Test Alert
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <script>
+            function testAlert() {
+                fetch("/test_alert", { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => console.log("Test alert triggered"));
+            }
+          </script>
+          
+          <div class="video-frame position-relative">
+            <img id="video-feed" class="img-fluid rounded shadow-sm" src="{{ url_for('video_feed') }}" alt="Campus corridor or hostel gate feed">
+            <div id="camera-off-msg" class="alert alert-secondary d-none text-center p-5">
+
+              <i class="bi bi-camera-video-off me-2"></i>Monitoring is currently paused.
+            </div>
+          </div>
+          <div class="mt-3 text-muted small">
+            Tip: if the video is not loading, refresh once. The stream starts when the first client opens it.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-4">
+      <div class="card kpi-card">
+        <div class="card-body">
+          <h5 class="card-title mb-1"><i class="bi bi-info-circle me-1"></i>Status</h5>
+          <div class="text-muted small mb-3">
+            This is a combined pipeline: YOLO weapon detection + violence (CNN‑LSTM) probability.
+          </div>
+          <ul class="list-group list-group-flush">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Location
+              <span class="badge text-bg-primary campus-badge">{{ location_name }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              Stream
+              <span id="stream-status" class="badge text-bg-success campus-badge">MJPEG</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              UI
+              <span class="badge text-bg-secondary campus-badge">Flask</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isRunning = true;
+
+    function updateUI(running) {
+      isRunning = running;
+      const btn = document.getElementById('toggle-btn');
+      const video = document.getElementById('video-feed');
+      const msg = document.getElementById('camera-off-msg');
+      const status = document.getElementById('stream-status');
+
+      if (running) {
+        btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i>Stop Camera';
+        btn.className = 'btn btn-danger ms-2';
+        video.classList.remove('d-none');
+        msg.classList.add('d-none');
+        status.className = 'badge text-bg-success campus-badge';
+        status.innerText = 'MJPEG';
+        
+        // Refresh video source to resume stream correctly
+        video.src = "{{ url_for('video_feed') }}?t=" + new Date().getTime();
+      } else {
+        btn.innerHTML = '<i class="bi bi-play-circle me-1"></i>Start Camera';
+        btn.className = 'btn btn-success ms-2';
+        video.classList.add('d-none');
+        msg.classList.remove('d-none');
+        status.className = 'badge text-bg-secondary campus-badge';
+        status.innerText = 'OFF';
+      }
+    }
+
+    function toggleCamera() {
+      const endpoint = isRunning ? "{{ url_for('stop_camera') }}" : "{{ url_for('start_camera') }}";
+      fetch(endpoint, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          checkStatus();
+        })
+        .catch(err => console.error(err));
+    }
+
+    function checkStatus() {
+      fetch("{{ url_for('camera_status') }}")
+        .then(res => res.json())
+        .then(data => {
+          updateUI(data.running);
+        })
+        .catch(err => console.error(err));
+    }
+
+    // Initial check
+    checkStatus();
+    // Poll every 5 seconds to keep UI in sync
+    setInterval(checkStatus, 5000);
+  </script>
+
+{% endblock %}
+

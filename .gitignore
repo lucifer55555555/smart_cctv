@@ -1,0 +1,27 @@
+# Large model files
+models/**/*.pt*
+models/**/*.pth
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Project Specific
+incidents/
+static/incidents/
+debug_error.log
+test_out.txt
+
+# Media
+*.mp4
+*.mkv
+*.avi
+*.mov

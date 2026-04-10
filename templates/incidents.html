@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Incidents - {{ location_name }}{% endblock %}
+
+{% block content %}
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">Incident Log</h3>
+      <div class="text-muted small">All recorded alerts for this campus camera</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('dashboard') }}">
+        <i class="bi bi-graph-up-arrow me-1"></i>Dashboard
+      </a>
+      <a class="btn btn-primary" href="{{ url_for('index') }}">
+        <i class="bi bi-camera-video me-1"></i>Live
+      </a>
+    </div>
+  </div>
+
+  <div class="card panel-card mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-md-6">
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="incidentSearch" type="text" class="form-control" placeholder="Search by risk, type, time, details...">
+          </div>
+        </div>
+        <div class="col-12 col-md-6 text-md-end">
+          <span class="text-muted small">
+            Tip: search works locally in your browser.
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card panel-card">
+    <div class="card-body">
+      {% if incidents %}
+        <div class="table-responsive">
+          <table id="incidentTable" class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Timestamp</th>
+                <th>Risk</th>
+                <th>Event Type</th>
+                <th>Location</th>
+                <th>Clip</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for inc in incidents %}
+                <tr>
+                  <td class="text-nowrap">{{ inc.timestamp }}</td>
+                  <td class="text-nowrap">
+                    {% set r = inc.risk_level %}
+                    {% if r == 'CRITICAL' %}
+                      <span class="badge text-bg-danger campus-badge">CRITICAL</span>
+                    {% elif r == 'HIGH_RISK' %}
+                      <span class="badge text-bg-warning campus-badge">HIGH</span>
+                    {% elif r == 'MEDIUM_RISK' %}
+                      <span class="badge text-bg-info campus-badge">MEDIUM</span>
+                    {% else %}
+                      <span class="badge text-bg-success campus-badge">{{ r }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-nowrap">{{ inc.event_type }}</td>
+                  <td class="text-nowrap">{{ inc.location }}</td>
+                  <td style="max-width: 260px;">
+                    <span class="text-muted small">{{ inc.clip_path }}</span>
+                  </td>
+                  <td style="min-width: 280px;">
+                    <span class="text-muted small">{{ inc.details }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="alert alert-secondary mb-0">
+          No campus incidents logged yet. Leave the system running and incidents will appear here.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    const input = document.getElementById('incidentSearch');
+    const table = document.getElementById('incidentTable');
+    if (input && table) {
+      input.addEventListener('input', () => {
+        const q = input.value.toLowerCase();
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+          const text = row.innerText.toLowerCase();
+          row.style.display = text.includes(q) ? '' : 'none';
+        });
+      });
+    }
+  </script>
+{% endblock %}
+
