@@ -292,7 +292,7 @@ ultralytics
 
 ## 👨‍💻 Author
 
-Krish Agrawal
+Krish Agrawal , Pratham Chandpurkar, prateek Ranjan , Prashant Bisen
 
 ---
 
